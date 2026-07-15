@@ -1,0 +1,17 @@
+@import 'tailwindcss';
+@import '@sherwood/ui/globals.css';
+@source '../../../../packages/ui/src';
+
+:root {
+  --background: oklch(0.985 0.002 247.839);
+  --foreground: oklch(0.141 0.005 285.823);
+  --primary: oklch(0.546 0.245 262.881);
+  --primary-foreground: oklch(0.985 0 0);
+  --accent: oklch(0.967 0.001 286.375);
+  --accent-foreground: oklch(0.21 0.006 285.885);
+  --input: oklch(0.92 0.004 286.32);
+  --ring: oklch(0.546 0.245 262.881);
+}
+
+* { border-color: var(--input); }
+body { background: var(--background); color: var(--foreground); }

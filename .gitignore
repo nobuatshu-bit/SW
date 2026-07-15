@@ -1,0 +1,23 @@
+# Dependencies and builds
+node_modules/
+.next/
+dist/
+coverage/
+
+# Go
+backend/api/bin/
+backend/api/tmp/
+
+# Foundry
+contracts/cache/
+contracts/out/
+contracts/broadcast/
+
+# Environment and local tooling
+.env
+.env.local
+.env.*.local
+!.env.example
+.DS_Store
+*.log
+.tools/

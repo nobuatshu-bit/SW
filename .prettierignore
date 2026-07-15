@@ -1,0 +1,8 @@
+node_modules
+.next
+dist
+coverage
+contracts/lib
+contracts/cache
+contracts/out
+contracts/broadcast

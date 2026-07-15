@@ -1,0 +1,19 @@
+{
+  "name": "@sherwood/sdk",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@sherwood/shared": "*",
+    "viem": "^2.38.3"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}

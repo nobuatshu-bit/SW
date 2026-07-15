@@ -1,0 +1,12 @@
+**/node_modules
+**/.next
+**/dist
+**/coverage
+.git
+.env
+.env.*
+!**/.env.example
+contracts/lib
+contracts/out
+contracts/cache
+contracts/broadcast
