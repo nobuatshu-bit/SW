@@ -68,6 +68,10 @@ library LaunchTypes {
         uint256 softCap;
         /// Maximum native-currency raise cap. Must be >= softCap.
         uint256 hardCap;
+        /// Minimum native-currency contribution per participant. Zero disables the check.
+        uint256 minContribution;
+        /// Maximum native-currency contribution per participant. Zero disables the check.
+        uint256 maxContribution;
         /// Unix timestamp (seconds) when the sale window opens.
         uint64 startTime;
         /// Unix timestamp (seconds) when the sale window closes.
@@ -99,5 +103,38 @@ library LaunchTypes {
         uint64 endTime;
         /// Block timestamp at which the record was written.
         uint64 createdAt;
+    }
+
+    // ── Launch sale state ─────────────────────────────────────────────────────
+
+    /// @dev State machine for the Launch contract. Terminal states are Graduated and Failed.
+    enum SaleState {
+        /// Deployed but sale window has not opened.
+        Pending,
+        /// Sale window is open; contributions accepted.
+        Active,
+        /// Sale ended and totalRaised >= softCap. Tokens claimable.
+        Graduated,
+        /// Sale ended and totalRaised < softCap, or creator cancelled. Refunds available.
+        Failed
+    }
+
+    // ── Vesting ───────────────────────────────────────────────────────────────
+
+    /// @dev Per-beneficiary linear vesting schedule with optional cliff.
+    struct VestingSchedule {
+        /// Total tokens allocated to this beneficiary.
+        uint256 totalAmount;
+        /// Tokens already claimed by the beneficiary.
+        uint256 claimed;
+        /// Unix timestamp when vesting begins (cliff start).
+        uint64 startTime;
+        /// Duration of the cliff in seconds. No tokens vest before start + cliff.
+        uint64 cliffDuration;
+        /// Total vesting duration in seconds, measured from startTime.
+        /// Must be > cliffDuration.
+        uint64 vestingDuration;
+        /// Whether the owner has revoked this schedule.
+        bool revoked;
     }
 }

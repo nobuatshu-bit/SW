@@ -35,6 +35,10 @@ interface ILaunchFactory {
     /// @param newImplementation Address of a deployed contract with bytecode.
     function setLaunchImplementation(address newImplementation) external;
 
+    /// @notice Called by a registered Launch clone when it reaches a terminal state.
+    ///         Decrements the creator's active launch count.
+    function noteTerminal() external;
+
     // ── Views ─────────────────────────────────────────────────────────────────
 
     /// @notice Returns the current protocol fee in basis points.

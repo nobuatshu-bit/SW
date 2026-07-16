@@ -336,6 +336,10 @@ contract LaunchFactory is ILaunchFactory, Ownable2Step, Pausable {
         if (p.softCap == 0 || p.hardCap < p.softCap) {
             revert SherwoodErrors.InvalidLaunchConfiguration();
         }
+        // maxContribution = 0 means disabled; if set it must be >= minContribution
+        if (p.maxContribution > 0 && p.maxContribution < p.minContribution) {
+            revert SherwoodErrors.InvalidLaunchConfiguration();
+        }
 
         // Schedule checks
         if (p.startTime < uint64(block.timestamp)) {

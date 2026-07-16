@@ -70,16 +70,18 @@ contract LaunchFactoryTest is Test {
 
     function _params() internal view returns (LaunchTypes.LaunchParams memory) {
         return LaunchTypes.LaunchParams({
-            name:           "Test Launch",
-            description:    "A test launch",
-            metadataURI:    "ipfs://QmTest",
-            token:          token,
-            tokenPrice:     0.01 ether,
+            name:            "Test Launch",
+            description:     "A test launch",
+            metadataURI:     "ipfs://QmTest",
+            token:           token,
+            tokenPrice:      0.01 ether,
             tokenAllocation: 1_000_000 ether,
-            softCap:        1 ether,
-            hardCap:        100 ether,
-            startTime:      uint64(block.timestamp + 1 hours),
-            endTime:        uint64(block.timestamp + 2 hours)
+            softCap:         1 ether,
+            hardCap:         100 ether,
+            minContribution: 0,
+            maxContribution: 0,
+            startTime:       uint64(block.timestamp + 1 hours),
+            endTime:         uint64(block.timestamp + 2 hours)
         });
     }
 
