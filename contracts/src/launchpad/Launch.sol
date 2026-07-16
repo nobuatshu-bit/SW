@@ -196,8 +196,14 @@ contract Launch is ILaunch, Ownable, Pausable, ReentrancyGuard {
         if (params.maxContribution > 0 && params.maxContribution < params.minContribution) {
             revert SherwoodErrors.InvalidLaunchConfiguration();
         }
-        if (params.startTime < uint64(block.timestamp) || params.endTime <= params.startTime) {
+        if (params.startTime < uint64(block.timestamp)) {
+            revert SherwoodErrors.SaleNotStarted();
+        }
+        if (params.endTime <= params.startTime) {
             revert SherwoodErrors.InvalidLaunchConfiguration();
+        }
+        if (params.endTime - params.startTime < LaunchConstants.MIN_SALE_DURATION_SECONDS) {
+            revert SherwoodErrors.InvalidLaunchDuration();
         }
 
         _initialized    = true;
@@ -226,12 +232,21 @@ contract Launch is ILaunch, Ownable, Pausable, ReentrancyGuard {
     ///         AND the contract holds at least tokenAllocation tokens.
     /// @dev    Permissionless — anyone can call once both conditions are met.
     ///         The token balance check ensures the creator has funded the contract.
-    ///         Reverts with SaleNotActive if the sale is not in Pending state
-    ///         (i.e. it has already been activated, graduated, failed, or cancelled).
+    ///         Error mapping:
+    ///           • SaleNotActive   — launch is already Active (cannot activate twice)
+    ///           • SaleAlreadyEnded — launch has already reached a terminal state
+    ///                                (Graduated or Failed)
+    ///           • SaleNotStarted  — startTime has not been reached yet
+    ///           • SaleAlreadyEnded (time) — endTime has passed without activation
+    ///           • TokenAllocationExceeded — contract balance below tokenAllocation
     function activate() external {
-        if (state != LaunchTypes.SaleState.Pending) {
+        if (state == LaunchTypes.SaleState.Active) {
             revert SherwoodErrors.SaleNotActive();
         }
+        if (state == LaunchTypes.SaleState.Graduated || state == LaunchTypes.SaleState.Failed) {
+            revert SherwoodErrors.SaleAlreadyEnded();
+        }
+        // state == Pending from here
         if (block.timestamp < startTime) revert SherwoodErrors.SaleNotStarted();
         if (block.timestamp >= endTime) revert SherwoodErrors.SaleAlreadyEnded();
         if (saleToken.balanceOf(address(this)) < tokenAllocation) {
