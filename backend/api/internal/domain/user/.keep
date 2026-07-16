@@ -1,0 +1,3 @@
+# User domain layer.
+# user.go defines the User struct and domain constraints.
+# repository.go defines the UserRepository interface.

@@ -1,0 +1,3 @@
+# Gin middleware functions.
+# Examples: auth.go (JWT validation), rate_limit.go, request_id.go, logger.go.
+# Middleware is wired in routes/router.go — not in individual controllers.

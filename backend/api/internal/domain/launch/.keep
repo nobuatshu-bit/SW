@@ -1,0 +1,4 @@
+# Launch domain layer.
+# launch.go defines the Launch struct, ProjectState enum, and domain-level
+# validation methods (e.g. CanActivate, CanCancel).
+# repository.go defines the LaunchRepository interface (no implementation).

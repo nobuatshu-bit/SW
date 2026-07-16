@@ -1,0 +1,4 @@
+# Repository implementations (Postgres).
+# One file per aggregate: launch_repo.go, user_repo.go, token_repo.go, etc.
+# Implements the interfaces defined in the domain layer.
+# No business logic — only SQL queries and result mapping.

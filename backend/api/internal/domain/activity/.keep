@@ -1,0 +1,3 @@
+# Activity domain layer.
+# activity.go defines the Activity read model (derived from transactions).
+# repository.go defines the ActivityRepository interface (read-only).

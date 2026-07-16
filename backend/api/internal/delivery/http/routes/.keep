@@ -1,0 +1,3 @@
+# Router registration.
+# router.go mounts all route groups and applies middleware.
+# Route definitions map HTTP method + path → controller function.

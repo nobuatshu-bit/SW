@@ -1,0 +1,3 @@
+# Portfolio application service.
+# service.go aggregates transaction records to compute per-user positions
+# across all launches (tokens purchased, claimable, refundable).

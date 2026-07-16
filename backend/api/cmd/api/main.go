@@ -8,53 +8,98 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
-
 	"github.com/sherwood-labs/sherwood/backend/api/internal/config"
-	"github.com/sherwood-labs/sherwood/backend/api/internal/delivery/http"
-	"github.com/sherwood-labs/sherwood/backend/api/internal/infrastructure/postgres"
+	"github.com/sherwood-labs/sherwood/backend/api/internal/database"
+	delivery "github.com/sherwood-labs/sherwood/backend/api/internal/delivery/http"
 	"github.com/sherwood-labs/sherwood/backend/api/internal/infrastructure/redis"
+	"github.com/sherwood-labs/sherwood/backend/api/pkg/logger"
 )
 
 func main() {
-	log.Logger = zerolog.New(os.Stdout).With().Timestamp().Logger()
-
 	ctx := context.Background()
+
+	// ── Configuration ─────────────────────────────────────────────────────────
 	cfg, err := config.Load(ctx)
 	if err != nil {
-		log.Fatal().Err(err).Msg("load configuration")
+		// Logger is not yet initialised; fall back to os.Stderr.
+		os.Stderr.WriteString("FATAL: load configuration: " + err.Error() + "\n")
+		os.Exit(1)
 	}
 
-	database, err := postgres.Connect(ctx, cfg.DatabaseURL)
+	// ── Logger ────────────────────────────────────────────────────────────────
+	var log logger.Logger
+	if cfg.IsProduction() {
+		log = logger.New(cfg.LogLevel, os.Stdout)
+	} else {
+		log = logger.NewDevelopment()
+	}
+
+	log.Info("configuration loaded",
+		logger.F("env", cfg.Environment),
+		logger.F("chain_id", cfg.ChainID),
+		logger.F("log_level", cfg.LogLevel),
+	)
+
+	// ── Database ──────────────────────────────────────────────────────────────
+	db, err := database.Connect(ctx, cfg.DatabaseURL)
 	if err != nil {
-		log.Fatal().Err(err).Msg("connect to postgres")
+		log.Fatal("connect to postgres", err)
+		os.Exit(1)
 	}
-	defer database.Close()
+	defer db.Close()
+	log.Info("postgres connected")
 
+	// Run migrations (no-op in development until Sprint 3 integrates migrate).
+	migrationRunner := database.NewMigrationRunner(db)
+	if err := database.RunMigrations(ctx, migrationRunner); err != nil {
+		log.Fatal("run database migrations", err)
+		os.Exit(1)
+	}
+
+	// ── Redis ─────────────────────────────────────────────────────────────────
 	cache, err := redis.Connect(ctx, cfg.RedisURL)
 	if err != nil {
-		log.Fatal().Err(err).Msg("connect to redis")
+		log.Fatal("connect to redis", err)
+		os.Exit(1)
 	}
-	defer cache.Close()
+	defer func() {
+		if closeErr := cache.Close(); closeErr != nil {
+			log.Error("close redis connection", closeErr)
+		}
+	}()
+	log.Info("redis connected")
 
-	router := http.NewRouter(cfg, database, cache)
-	server := http.NewServer(cfg.HTTPAddress, router)
+	// ── HTTP server ───────────────────────────────────────────────────────────
+	router := delivery.NewRouter(delivery.RouterDeps{
+		Config: cfg,
+		DB:     db,
+		Cache:  cache,
+		Log:    log,
+	})
+
+	server := delivery.NewServer(cfg.HTTPAddress, router)
 
 	go func() {
-		log.Info().Str("address", cfg.HTTPAddress).Msg("starting HTTP server")
-		if serveErr := server.ListenAndServe(); serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
-			log.Fatal().Err(serveErr).Msg("HTTP server failed")
+		log.Info("HTTP server starting", logger.F("address", cfg.HTTPAddress))
+		if serveErr := server.ListenAndServe(); serveErr != nil && !errors.Is(serveErr, delivery.ErrServerClosed) {
+			log.Fatal("HTTP server failed", serveErr)
+			os.Exit(1)
 		}
 	}()
 
-	signalContext, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
+	// ── Graceful shutdown ─────────────────────────────────────────────────────
+	sigCtx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-	<-signalContext.Done()
+	<-sigCtx.Done()
 
-	shutdownContext, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	log.Info("shutdown signal received")
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	if err := server.Shutdown(shutdownContext); err != nil {
-		log.Error().Err(err).Msg("graceful shutdown failed")
+
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		log.Error("graceful shutdown failed", err)
+	} else {
+		log.Info("HTTP server stopped cleanly")
 	}
 }

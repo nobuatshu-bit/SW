@@ -1,0 +1,2 @@
+# User application service.
+# service.go handles SIWE authentication, session management, profile updates.

@@ -1,0 +1,3 @@
+# Token domain layer.
+# token.go defines the Token struct (mirrors ERC-20 deployment metadata).
+# repository.go defines the TokenRepository interface.

@@ -1,0 +1,4 @@
+# HTTP handler functions (controllers).
+# One file per resource: launch_controller.go, auth_controller.go, etc.
+# Controllers call application services and map errors to HTTP status codes.
+# No business logic lives here.

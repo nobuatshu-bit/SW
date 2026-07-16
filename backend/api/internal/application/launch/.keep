@@ -1,0 +1,3 @@
+# Launch application service.
+# service.go defines the LaunchService interface and its implementation.
+# Orchestrates repository calls, emits domain events, enforces business rules.

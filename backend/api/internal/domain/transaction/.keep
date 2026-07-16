@@ -1,0 +1,3 @@
+# Transaction domain layer.
+# transaction.go defines the Transaction struct and TransactionType enum.
+# repository.go defines the TransactionRepository interface.

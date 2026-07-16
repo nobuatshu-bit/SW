@@ -1,0 +1,4 @@
+# On-chain event indexer.
+# indexer.go polls or subscribes to RPC logs for SherwoodFactory and
+# LaunchProject events, then calls application services to persist them.
+# Runs as a background goroutine started from main.go.

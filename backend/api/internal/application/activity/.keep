@@ -1,0 +1,2 @@
+# Activity application service.
+# service.go builds the denormalised activity feed from transaction records.

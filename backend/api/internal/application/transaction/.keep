@@ -1,0 +1,2 @@
+# Transaction application service.
+# service.go handles indexing and querying of on-chain transaction records.
