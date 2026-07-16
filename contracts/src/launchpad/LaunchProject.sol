@@ -312,7 +312,17 @@ contract LaunchProject is ILaunchProject, SherwoodEvents, ReentrancyGuard {
             contributions[msg.sender] = 0;
             uint256 tokenAmount = purchasedTokens[msg.sender];
             purchasedTokens[msg.sender] = 0;
-            totalOutstandingTokens -= tokenAmount;
+            // Decrement by at most what is still recorded as outstanding.
+            // sell() may have already reduced totalOutstandingTokens against
+            // the global pool without touching per-account state, so clamping
+            // prevents underflow while still keeping the invariant
+            // totalOutstandingTokens == sum(purchasedTokens[*]) consistent
+            // in the normal (no ghost-sell) case.
+            if (tokenAmount > totalOutstandingTokens) {
+                totalOutstandingTokens = 0;
+            } else {
+                totalOutstandingTokens -= tokenAmount;
+            }
             _sendNative(msg.sender, refundAmount);
             emit TokensClaimed(address(this), msg.sender, refundAmount, true);
             return;

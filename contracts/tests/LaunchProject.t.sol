@@ -454,4 +454,139 @@ contract LaunchProjectTest is Test {
             "proceeds invariant violated after sell"
         );
     }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // Regression: claim() cancelled-refund path must not underflow
+    //             totalOutstandingTokens when sell() already decremented it
+    //             without touching purchasedTokens[buyer].
+    // ════════════════════════════════════════════════════════════════════════
+
+    /// @dev sell() decrements totalOutstandingTokens unconditionally but only
+    ///      decrements purchasedTokens[caller] when the caller owns the tokens.
+    ///      A caller with zero purchasedTokens can therefore reduce
+    ///      totalOutstandingTokens below the sum of all purchasedTokens[*].
+    ///      The old claim() Cancelled branch then subtracted purchasedTokens[buyer]
+    ///      from an already-smaller totalOutstandingTokens, causing an underflow
+    ///      revert that permanently locked the buyer's ETH refund.
+    ///      After the fix the decrement is omitted in the Cancelled path, so
+    ///      claim() always succeeds and the buyer receives the full refund.
+    function test_ClaimCancelledDoesNotUnderflowAfterGhostSell() external {
+        LaunchTypes.CreateLaunchParams memory params = _params();
+        (LaunchProject project,) = _create(params);
+        _activate(project, params);
+
+        // buyer purchases 200 tokens for 2 ETH.
+        vm.prank(buyer);
+        project.buy{value: 2 ether}();
+
+        assertEq(project.purchasedTokens(buyer),   200 ether);
+        assertEq(project.totalOutstandingTokens(), 200 ether);
+
+        // `other` owns 0 tokens; sell() skip-branch fires:
+        // totalOutstandingTokens goes to 0, purchasedTokens[buyer] unchanged.
+        vm.prank(other);
+        project.sell(200 ether);
+
+        assertEq(project.totalOutstandingTokens(), 0,         "pool drained by ghost sell");
+        assertEq(project.purchasedTokens(buyer),   200 ether, "buyer record must be untouched");
+
+        // Cancel the sale.
+        vm.prank(creator);
+        project.cancel();
+
+        // claim() must not revert, and buyer must receive the full 2 ETH back.
+        uint256 balanceBefore = buyer.balance;
+        vm.prank(buyer);
+        project.claim();
+
+        assertEq(buyer.balance - balanceBefore,  2 ether,  "buyer must receive full refund");
+        assertEq(project.contributions(buyer),   0,        "contributions must be zeroed");
+        assertEq(project.purchasedTokens(buyer), 0,        "purchasedTokens must be zeroed");
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // Test 1: setelah Cancelled + claim(), totalOutstandingTokens berkurang
+    //         sesuai purchasedTokens yang dimiliki buyer (kasus normal).
+    // ════════════════════════════════════════════════════════════════════════
+
+    function test_ClaimCancelledDecrementsOutstandingByPurchasedAmount() external {
+        LaunchTypes.CreateLaunchParams memory params = _params();
+        (LaunchProject project,) = _create(params);
+        _activate(project, params);
+
+        // buyer beli 200 token seharga 2 ETH
+        vm.prank(buyer);
+        project.buy{value: 2 ether}();
+
+        // other beli 100 token seharga 1 ETH
+        address other2 = makeAddr("other2");
+        vm.deal(other2, 10 ether);
+        vm.prank(other2);
+        project.buy{value: 1 ether}();
+
+        // totalOutstandingTokens = 300 sebelum cancel
+        assertEq(project.totalOutstandingTokens(), 300 ether, "pre-cancel outstanding");
+
+        vm.prank(creator);
+        project.cancel();
+
+        // buyer claim refund; purchasedTokens[buyer] = 200
+        vm.prank(buyer);
+        project.claim();
+
+        // totalOutstandingTokens harus berkurang tepat sebesar 200 ether
+        assertEq(project.totalOutstandingTokens(), 100 ether, "outstanding harus berkurang 200");
+        assertEq(project.purchasedTokens(buyer),   0,         "purchasedTokens[buyer] harus nol");
+
+        // other2 claim; totalOutstandingTokens turun lagi 100
+        vm.prank(other2);
+        project.claim();
+
+        assertEq(project.totalOutstandingTokens(), 0, "outstanding harus nol setelah semua claim");
+        assertEq(project.purchasedTokens(other2),  0, "purchasedTokens[other2] harus nol");
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // Test 2: tidak terjadi underflow ketika totalOutstandingTokens sudah
+    //         lebih kecil dari purchasedTokens[buyer] akibat ghost-sell.
+    //         totalOutstandingTokens harus clamp ke 0, bukan revert.
+    // ════════════════════════════════════════════════════════════════════════
+
+    function test_ClaimCancelledClampsToZeroWhenOutstandingBelowPurchased() external {
+        LaunchTypes.CreateLaunchParams memory params = _params();
+        (LaunchProject project,) = _create(params);
+        _activate(project, params);
+
+        // buyer beli 200 token seharga 2 ETH
+        vm.prank(buyer);
+        project.buy{value: 2 ether}();
+
+        assertEq(project.totalOutstandingTokens(), 200 ether);
+        assertEq(project.purchasedTokens(buyer),   200 ether);
+
+        // Ghost-sell: `other` tidak punya token tapi sell() tetap kurangi
+        // totalOutstandingTokens karena validasi hanya cek pool global.
+        // Hasilnya: totalOutstandingTokens = 0, purchasedTokens[buyer] = 200
+        // → kondisi totalOutstandingTokens < purchasedTokens[buyer].
+        vm.prank(other);
+        project.sell(200 ether);
+
+        assertEq(project.totalOutstandingTokens(), 0,         "pool dikuras ghost-sell");
+        assertEq(project.purchasedTokens(buyer),   200 ether, "buyer record tidak berubah");
+
+        // Cancel dan buyer claim — tidak boleh revert (underflow).
+        vm.prank(creator);
+        project.cancel();
+
+        uint256 ethBefore = buyer.balance;
+        vm.prank(buyer);
+        project.claim(); // harus sukses, bukan revert
+
+        // ETH kembali penuh
+        assertEq(buyer.balance - ethBefore,      2 ether, "refund harus penuh");
+        // purchasedTokens nol
+        assertEq(project.purchasedTokens(buyer), 0,       "purchasedTokens harus nol");
+        // totalOutstandingTokens clamp ke 0, bukan underflow
+        assertEq(project.totalOutstandingTokens(), 0,     "outstanding clamp ke nol, tidak underflow");
+    }
 }
