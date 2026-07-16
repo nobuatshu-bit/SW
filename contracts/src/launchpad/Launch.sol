@@ -224,14 +224,16 @@ contract Launch is ILaunch, Ownable, Pausable, ReentrancyGuard {
 
     /// @notice Transitions the sale from Pending to Active once startTime is reached
     ///         AND the contract holds at least tokenAllocation tokens.
-    /// @dev Permissionless — anyone can call once both conditions are met.
-    ///      The token balance check ensures the creator has funded the contract.
+    /// @dev    Permissionless — anyone can call once both conditions are met.
+    ///         The token balance check ensures the creator has funded the contract.
+    ///         Reverts with SaleNotActive if the sale is not in Pending state
+    ///         (i.e. it has already been activated, graduated, failed, or cancelled).
     function activate() external {
         if (state != LaunchTypes.SaleState.Pending) {
             revert SherwoodErrors.SaleNotActive();
         }
         if (block.timestamp < startTime) revert SherwoodErrors.SaleNotStarted();
-        if (block.timestamp >= endTime)  revert SherwoodErrors.SaleAlreadyEnded();
+        if (block.timestamp >= endTime) revert SherwoodErrors.SaleAlreadyEnded();
         if (saleToken.balanceOf(address(this)) < tokenAllocation) {
             revert SherwoodErrors.TokenAllocationExceeded();
         }

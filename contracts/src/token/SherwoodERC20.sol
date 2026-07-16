@@ -63,14 +63,18 @@ contract SherwoodERC20 is ERC20, ERC20Burnable, ERC20Pausable, ERC20Permit, Owna
         _unpause();
     }
 
-    /// @notice Burns `amount` tokens from `account`, deducting from the caller's
-    ///         allowance. The owner may use this to remove tokens from any holder.
-    /// @dev Wraps `burnFrom`. The caller must have an allowance ≥ `amount` over
-    ///      `account`, or the caller must be the owner who has been explicitly
-    ///      approved. The owner is NOT implicitly approved over all balances.
-    ///      For self-burning, holders should call `burn(amount)` directly.
-    /// @param account The address whose tokens will be burned.
-    /// @param amount  The number of tokens to burn, in wei.
+    /// @notice Burns `amount` tokens from `account` without requiring an allowance.
+    ///         This is an owner-privileged operation intended for compliance use cases
+    ///         (e.g. recovering tokens sent to a blacklisted address by court order).
+    ///
+    /// @dev    Calls the internal `_burn` directly, bypassing the allowance check that
+    ///         `burnFrom` would perform. This means the owner can burn any holder's
+    ///         tokens unilaterally. Use with extreme caution.
+    ///         For self-burning without owner privileges, holders should call
+    ///         `burn(amount)` directly.
+    ///
+    /// @param account The address whose tokens will be burned. Cannot be zero address.
+    /// @param amount  The number of tokens to burn, in wei. Must be greater than zero.
     function ownerBurn(address account, uint256 amount) external onlyOwner {
         if (account == address(0)) revert SherwoodErrors.InvalidAddress();
         if (amount == 0) revert SherwoodErrors.InvalidTokenAmount();

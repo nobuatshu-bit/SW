@@ -440,4 +440,65 @@ contract VestingTest is Test {
         vm.warp(start + warpSeconds);
         assertLe(vesting.claimableAmount(beneficiary1), vesting.vestedAmount(beneficiary1));
     }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // Sprint 8 — HIGH-1: beneficiary enumeration deduplication
+    // ════════════════════════════════════════════════════════════════════════
+
+    function test_RevokeAndRescheduleDoesNotDuplicateBeneficiary() external {
+        _createSchedule(beneficiary1);
+        assertEq(vesting.beneficiaryCount(), 1);
+
+        vm.prank(owner);
+        vesting.revoke(beneficiary1);
+
+        vm.prank(owner);
+        vesting.createSchedule(beneficiary1, TOTAL, _startTime(), CLIFF, DURATION);
+
+        assertEq(vesting.beneficiaryCount(), 1);
+        assertEq(vesting.beneficiaryAt(0), beneficiary1);
+    }
+
+    function test_TwoBeneficiariesHaveCount2() external {
+        _createSchedule(beneficiary1);
+        vm.prank(owner);
+        vesting.createSchedule(beneficiary2, TOTAL, _startTime(), CLIFF, DURATION);
+
+        assertEq(vesting.beneficiaryCount(), 2);
+        assertEq(vesting.beneficiaryAt(0), beneficiary1);
+        assertEq(vesting.beneficiaryAt(1), beneficiary2);
+    }
+
+    function test_RevokeRescheduleWithOtherBeneficiaryKeepsCorrectCount() external {
+        _createSchedule(beneficiary1);
+        vm.prank(owner);
+        vesting.revoke(beneficiary1);
+
+        vm.prank(owner);
+        vesting.createSchedule(beneficiary2, TOTAL, _startTime(), CLIFF, DURATION);
+
+        vm.prank(owner);
+        vesting.createSchedule(beneficiary1, TOTAL, _startTime(), CLIFF, DURATION);
+
+        assertEq(vesting.beneficiaryCount(), 2);
+    }
+
+    function testFuzz_RescheduleClaimNeverExceedsNewTotal(uint256 warpSeconds) external {
+        uint64 start = _startTime();
+        _createSchedule(beneficiary1);
+
+        warpSeconds = bound(warpSeconds, uint256(CLIFF), uint256(DURATION));
+        vm.warp(start + warpSeconds);
+
+        vm.prank(owner);
+        vesting.revoke(beneficiary1);
+
+        vm.prank(owner);
+        vesting.createSchedule(beneficiary1, TOTAL, uint64(block.timestamp), CLIFF, DURATION);
+
+        LaunchTypes.VestingSchedule memory s = vesting.getSchedule(beneficiary1);
+        assertEq(s.claimed, 0);
+        assertEq(s.totalAmount, TOTAL);
+        assertFalse(s.revoked);
+    }
 }

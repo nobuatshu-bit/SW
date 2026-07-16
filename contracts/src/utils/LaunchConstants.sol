@@ -10,6 +10,11 @@ library LaunchConstants {
     ///      creator may own. Prevents spam and limits indexer surface area.
     uint256 internal constant MAX_LAUNCHES_PER_CREATOR = 3;
 
+    /// @dev Minimum sale duration in seconds (1 hour).
+    ///      Prevents 0-second or near-instant sales that could be exploited
+    ///      by frontrunning or sandwich attacks during the activation window.
+    uint256 internal constant MIN_SALE_DURATION_SECONDS = 1 hours;
+
     /// @dev Maximum vesting duration: 4 years in seconds.
     uint64 internal constant MAX_VESTING_DURATION = 4 * 365 days;
 }

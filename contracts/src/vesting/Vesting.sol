@@ -131,6 +131,11 @@ contract Vesting is Ownable2Step, Pausable, ReentrancyGuard {
             revert SherwoodErrors.ScheduleAlreadyExists(beneficiary);
         }
 
+        // Capture whether this beneficiary is brand-new BEFORE overwriting storage.
+        // After the write, existing.totalAmount will be non-zero, so we can't use it
+        // to detect first-time registration.
+        bool isNewBeneficiary = (existing.totalAmount == 0);
+
         _schedules[beneficiary] = LaunchTypes.VestingSchedule({
             totalAmount:     totalAmount,
             claimed:         0,
@@ -140,7 +145,13 @@ contract Vesting is Ownable2Step, Pausable, ReentrancyGuard {
             revoked:         false
         });
 
-        _beneficiaries.push(beneficiary);
+        // Only push to the enumeration array for first-time beneficiaries.
+        // Re-scheduled beneficiaries (previously revoked) are already in the
+        // array from their original schedule — pushing again would create a
+        // duplicate entry that corrupts beneficiaryCount() and beneficiaryAt().
+        if (isNewBeneficiary) {
+            _beneficiaries.push(beneficiary);
+        }
 
         // Pull tokens from owner. Owner must have approved this contract.
         token.safeTransferFrom(msg.sender, address(this), totalAmount);
@@ -210,6 +221,9 @@ contract Vesting is Ownable2Step, Pausable, ReentrancyGuard {
     // ── Views ─────────────────────────────────────────────────────────────────
 
     /// @notice Returns the full vesting schedule for a beneficiary.
+    ///         Returns a zero-valued struct if no schedule exists.
+    /// @param  beneficiary  Address whose schedule to look up.
+    /// @return              The VestingSchedule struct stored for that address.
     function getSchedule(address beneficiary)
         external
         view
@@ -218,22 +232,33 @@ contract Vesting is Ownable2Step, Pausable, ReentrancyGuard {
         return _schedules[beneficiary];
     }
 
-    /// @notice Returns the total amount vested so far (including already claimed).
+    /// @notice Returns the total amount vested so far for a beneficiary (including
+    ///         already-claimed tokens). Returns 0 if no schedule exists.
+    /// @param  beneficiary  Address to query.
+    /// @return              Cumulative vested amount in token wei.
     function vestedAmount(address beneficiary) external view returns (uint256) {
         return _vestedAmount(_schedules[beneficiary]);
     }
 
-    /// @notice Returns the amount claimable right now by the beneficiary.
+    /// @notice Returns the amount the beneficiary can claim right now.
+    ///         Returns 0 if no schedule exists, before the cliff, or if all
+    ///         vested tokens have already been claimed.
+    /// @param  beneficiary  Address to query.
+    /// @return              Claimable amount in token wei.
     function claimableAmount(address beneficiary) external view returns (uint256) {
         return _claimableAmount(_schedules[beneficiary]);
     }
 
     /// @notice Returns the total number of beneficiary addresses ever registered.
+    /// @return  Count of unique beneficiary addresses in the enumeration array.
     function beneficiaryCount() external view returns (uint256) {
         return _beneficiaries.length;
     }
 
     /// @notice Returns a beneficiary address by zero-based index.
+    ///         Reverts with a standard array-bounds panic if index >= beneficiaryCount().
+    /// @param  index  Zero-based position in the beneficiary enumeration array.
+    /// @return        Beneficiary address at that index.
     function beneficiaryAt(uint256 index) external view returns (address) {
         return _beneficiaries[index];
     }

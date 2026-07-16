@@ -366,4 +366,92 @@ contract LaunchProjectTest is Test {
             endTime: uint64(block.timestamp + 2 hours)
         });
     }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // Sprint 8 — HIGH-2: sell() round-trip check
+    // ════════════════════════════════════════════════════════════════════════
+
+    /// @dev Selling the exact amount that was bought must succeed with a clean
+    ///      round-trip. The refund must equal the original contribution.
+    function test_SellRoundTripIsExact() external {
+        LaunchTypes.CreateLaunchParams memory params = _params();
+        (LaunchProject project,) = _create(params);
+        _activate(project, params);
+
+        uint256 payment = 2 ether;
+        vm.prank(buyer);
+        project.buy{value: payment}();
+
+        uint256 tokensBought = project.purchasedTokens(buyer);
+        uint256 balanceBefore = buyer.balance;
+
+        vm.prank(buyer);
+        project.sell(tokensBought);
+
+        assertEq(buyer.balance, balanceBefore + payment);
+        assertEq(project.purchasedTokens(buyer), 0);
+        assertEq(project.contributions(buyer), 0);
+        assertEq(project.totalRaised(), 0);
+    }
+
+    function test_SellFullAmountZeroesProceeds() external {
+        LaunchTypes.CreateLaunchParams memory params = _params();
+        (LaunchProject project,) = _create(params);
+        _activate(project, params);
+
+        vm.prank(buyer);
+        project.buy{value: 2 ether}();
+
+        vm.prank(buyer);
+        project.sell(project.purchasedTokens(buyer));
+
+        assertEq(project.totalRaised(), 0);
+        assertEq(project.protocolFeesAccrued(), 0);
+        assertEq(project.creatorProceedsAccrued(), 0);
+    }
+
+    function testFuzz_ProceedsInvariantHoldsAfterBuy(uint256 payment) external {
+        LaunchTypes.CreateLaunchParams memory params = _params();
+        (LaunchProject project,) = _create(params);
+        _activate(project, params);
+
+        uint256 price = params.tokenPrice;
+        payment = bound(payment / price * price, price, params.maxRaise);
+
+        vm.prank(buyer);
+        project.buy{value: payment}();
+
+        assertEq(
+            project.totalRaised(),
+            project.protocolFeesAccrued() + project.creatorProceedsAccrued(),
+            "proceeds invariant violated after buy"
+        );
+    }
+
+    function testFuzz_ProceedsInvariantHoldsAfterSell(uint256 payment) external {
+        LaunchTypes.CreateLaunchParams memory params = _params();
+        (LaunchProject project,) = _create(params);
+        _activate(project, params);
+
+        uint256 price = params.tokenPrice;
+        payment = bound(payment / price * price, price * 2, params.maxRaise);
+
+        vm.prank(buyer);
+        project.buy{value: payment}();
+
+        uint256 tokensOwned = project.purchasedTokens(buyer);
+        uint256 half = tokensOwned / 2;
+
+        uint256 refund = half * price / 1e18;
+        if (half == 0 || refund * 1e18 / price != half) return;
+
+        vm.prank(buyer);
+        project.sell(half);
+
+        assertEq(
+            project.totalRaised(),
+            project.protocolFeesAccrued() + project.creatorProceedsAccrued(),
+            "proceeds invariant violated after sell"
+        );
+    }
 }

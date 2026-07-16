@@ -74,4 +74,8 @@ interface ILaunchFactory {
     /// @notice Returns the number of active (non-terminal) launches for a creator.
     /// @param creator Address to query.
     function getActiveLaunchCount(address creator) external view returns (uint256);
+
+    /// @notice Returns whether an address was deployed and registered by this factory.
+    /// @param launch Address to check.
+    function isRegistered(address launch) external view returns (bool);
 }

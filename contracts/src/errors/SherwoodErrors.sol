@@ -6,10 +6,10 @@ import {LaunchTypes} from "../libraries/LaunchTypes.sol";
 library SherwoodErrors {
     error AlreadyInitialized();
     error BelowMinContribution(uint256 sent, uint256 minimum);
-    error CliffNotReached();
     error EnforcedPause();
     error ExpectedPause();
     error InvalidAddress();
+    error InvalidAllocation();
     error InvalidDuration();
     error InvalidFeeBps(uint256 feeBps);
     error InvalidLaunchConfiguration();
@@ -17,12 +17,15 @@ library SherwoodErrors {
     error InvalidPaymentAmount();
     error InvalidTokenAmount();
     error InvalidProjectState(LaunchTypes.ProjectState currentState);
+    error InvalidRecipientCount();
     error MaxContributionExceeded(uint256 newTotal, uint256 maximum);
     error MaximumRaiseExceeded();
     error NativeTransferFailed();
     error NoClaimableBalance();
     error NoVestedTokens();
     error NoWithdrawableBalance();
+    error NotALaunch(address caller);
+    error RecipientSharesMismatch();
     error SaleAlreadyEnded();
     error SaleEnded();
     error SaleNotActive();

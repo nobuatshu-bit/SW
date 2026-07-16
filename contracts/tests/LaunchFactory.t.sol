@@ -24,6 +24,13 @@ contract MockLaunch is ILaunch {
     uint16  public feeBps_;
     bool    public initialized;
 
+    /// @dev Configurable state. Set to Graduated in initialize() so that EIP-1167
+    ///      clones (whose storage starts zeroed) satisfy the terminal-state check
+    ///      in noteTerminal(). Tests that need a non-terminal state call setState().
+    LaunchTypes.SaleState public state;
+
+    function setState(LaunchTypes.SaleState s) external { state = s; }
+
     function initialize(
         address factory__,
         address creator__,
@@ -39,6 +46,9 @@ contract MockLaunch is ILaunch {
         feeRecipient_ = feeRecipient__;
         feeBps_       = protocolFeeBps;
         initialized   = true;
+        // Default clones to Graduated so noteTerminal() state check passes.
+        // Tests that need Pending/Active must call setState() after createLaunch().
+        state = LaunchTypes.SaleState.Graduated;
     }
 }
 
@@ -598,5 +608,64 @@ contract LaunchFactoryTest is Test {
         assertEq(iface.protocolFeeBps(), INITIAL_FEE_BPS);
         assertEq(iface.feeRecipient(),   feeRecipient);
         assertEq(iface.launchCount(),    0);
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // Sprint 8 — CRIT-1: noteTerminal state verification
+    // ════════════════════════════════════════════════════════════════════════
+
+    /// @dev A registered launch in a non-terminal state must NOT be able to
+    ///      decrement the active count.
+    function test_NoteTerminalRevertsWhenCallerIsNotTerminal() external {
+        address launchAddr = _createLaunch();
+        // Override the clone's state to Active (non-terminal) to trigger the revert.
+        MockLaunch(launchAddr).setState(LaunchTypes.SaleState.Active);
+        vm.prank(launchAddr);
+        vm.expectRevert(SherwoodErrors.SaleNotActive.selector);
+        factory.noteTerminal();
+        assertEq(factory.getActiveLaunchCount(creator), 1);
+    }
+
+    /// @dev Pending is also a non-terminal state — noteTerminal must revert.
+    function test_NoteTerminalRevertsWhenCallerHasNoStateFunction() external {
+        assertEq(factory.getActiveLaunchCount(creator), 0);
+        _createLaunch();
+        assertEq(factory.getActiveLaunchCount(creator), 1);
+
+        address launchAddr = factory.launchAt(0);
+        // Set to Pending (non-terminal) to confirm the guard fires.
+        MockLaunch(launchAddr).setState(LaunchTypes.SaleState.Pending);
+        vm.prank(launchAddr);
+        vm.expectRevert(SherwoodErrors.SaleNotActive.selector);
+        factory.noteTerminal();
+        // Count must remain unchanged.
+        assertEq(factory.getActiveLaunchCount(creator), 1);
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // Sprint 8 — LaunchConstants.MIN_SALE_DURATION_SECONDS
+    // ════════════════════════════════════════════════════════════════════════
+
+    function test_MinSaleDurationConstantExists() external pure {
+        assertGe(LaunchConstants.MIN_SALE_DURATION_SECONDS, 60);
+        assertEq(LaunchConstants.MIN_SALE_DURATION_SECONDS, 1 hours);
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // Sprint 8 — Fuzz: active count never goes below zero
+    // ════════════════════════════════════════════════════════════════════════
+
+    function testFuzz_ActiveCountNeverUnderflows(uint8 extraCalls) external {
+        address launch = _createLaunch();
+        vm.prank(launch);
+        factory.noteTerminal();
+        assertEq(factory.getActiveLaunchCount(creator), 0);
+
+        uint256 calls = bound(extraCalls, 0, 10);
+        for (uint256 i = 0; i < calls; i++) {
+            vm.prank(launch);
+            try factory.noteTerminal() {} catch {}
+            assertEq(factory.getActiveLaunchCount(creator), 0);
+        }
     }
 }

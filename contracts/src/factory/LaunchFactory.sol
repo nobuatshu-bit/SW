@@ -12,6 +12,12 @@ import {ILaunchFactory} from "../interfaces/ILaunchFactory.sol";
 import {LaunchConstants} from "../utils/LaunchConstants.sol";
 import {LaunchTypes} from "../libraries/LaunchTypes.sol";
 
+/// @dev Minimal read interface used by noteTerminal() to verify a launch is
+///      actually in a terminal state before decrementing the creator's counter.
+interface ILaunchState {
+    function state() external view returns (LaunchTypes.SaleState);
+}
+
 /// @title LaunchFactory
 /// @author SHERWOOD Labs
 /// @notice Deploys gas-efficient EIP-1167 Launch clones and maintains an on-chain
@@ -192,14 +198,24 @@ contract LaunchFactory is ILaunchFactory, Ownable2Step, Pausable {
     // ── External: launch lifecycle callback ───────────────────────────────────
 
     /// @notice Called by a registered Launch clone when it reaches a terminal state
-    ///         (Graduated or Cancelled) to decrement the creator's active launch count.
+    ///         (Graduated or Failed) to decrement the creator's active launch count.
     /// @dev    Only callable by addresses that hold a LaunchRecord in this factory,
-    ///         preventing arbitrary callers from manipulating creator limits.
-    ///         The Launch contract (next sprint) will call this from finalize() and cancel().
+    ///         AND only when the caller's sale state is Graduated or Failed.
+    ///         The state check prevents a launch in Active or Pending state from
+    ///         prematurely decrementing the creator's limit, which would allow more
+    ///         launches than MAX_LAUNCHES_PER_CREATOR.
     function noteTerminal() external {
         LaunchTypes.LaunchRecord storage record = _launchRecords[msg.sender];
         // A zero-address creator means msg.sender is not a registered launch.
         if (record.creator == address(0)) revert SherwoodErrors.Unauthorized();
+
+        // Verify the launch is actually in a terminal state.
+        // This prevents a registered-but-active launch from reducing the cap.
+        LaunchTypes.SaleState callerState = ILaunchState(msg.sender).state();
+        if (
+            callerState != LaunchTypes.SaleState.Graduated &&
+            callerState != LaunchTypes.SaleState.Failed
+        ) revert SherwoodErrors.SaleNotActive();
 
         address creator = record.creator;
         if (_activeLaunchCount[creator] > 0) {
@@ -293,6 +309,7 @@ contract LaunchFactory is ILaunchFactory, Ownable2Step, Pausable {
 
     // ── Private: setters ─────────────────────────────────────────────────────
 
+    /// @dev Validates and stores a new protocol fee, emitting ProtocolFeeUpdated.
     function _setProtocolFee(uint16 newFeeBps) private {
         if (newFeeBps > LaunchConstants.MAX_PROTOCOL_FEE_BPS) {
             revert SherwoodErrors.InvalidFeeBps(newFeeBps);
@@ -302,6 +319,7 @@ contract LaunchFactory is ILaunchFactory, Ownable2Step, Pausable {
         emit ProtocolFeeUpdated(previous, newFeeBps);
     }
 
+    /// @dev Validates and stores a new fee recipient, emitting FeeRecipientUpdated.
     function _setFeeRecipient(address newRecipient) private {
         if (newRecipient == address(0)) revert SherwoodErrors.InvalidAddress();
         address previous = feeRecipient;
@@ -309,6 +327,8 @@ contract LaunchFactory is ILaunchFactory, Ownable2Step, Pausable {
         emit FeeRecipientUpdated(previous, newRecipient);
     }
 
+    /// @dev Validates and stores a new implementation address, emitting
+    ///      LaunchImplementationUpdated. Reverts if the address has no bytecode.
     function _setLaunchImplementation(address newImpl) private {
         if (newImpl == address(0) || newImpl.code.length == 0) {
             revert SherwoodErrors.InvalidAddress();
@@ -322,6 +342,8 @@ contract LaunchFactory is ILaunchFactory, Ownable2Step, Pausable {
 
     /// @dev Validates all creator-supplied LaunchParams.
     ///      Checks are ordered cheapest-first to fail as early as possible.
+    ///      Enforces MIN_SALE_DURATION_SECONDS between startTime and endTime to
+    ///      prevent near-instant sales vulnerable to frontrunning.
     function _validateParams(LaunchTypes.LaunchParams calldata p) private view {
         // Address checks
         if (p.token == address(0)) revert SherwoodErrors.InvalidAddress();
@@ -346,6 +368,9 @@ contract LaunchFactory is ILaunchFactory, Ownable2Step, Pausable {
             revert SherwoodErrors.SaleNotStarted();
         }
         if (p.endTime <= p.startTime) {
+            revert SherwoodErrors.InvalidLaunchDuration();
+        }
+        if (p.endTime - p.startTime < LaunchConstants.MIN_SALE_DURATION_SECONDS) {
             revert SherwoodErrors.InvalidLaunchDuration();
         }
     }
